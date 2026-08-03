@@ -1,1 +1,16 @@
-python3 -m ishu
+#!/bin/bash
+set -e
+cd "$(dirname "$0")"
+
+# uv sync installs to a local venv at .venv. Make sure we use that venv's
+# Python so all dependencies (python-dotenv, kurigram, ntgcalls, yt-dlp, etc.)
+# are importable even if the system python has no site-packages.
+if [ -x .venv/bin/python ]; then
+    exec .venv/bin/python -m ishu
+fi
+# Fallback: try `uv run` (re-activates the project env on-the-fly).
+if command -v uv >/dev/null 2>&1; then
+    exec uv run python -m ishu
+fi
+# Last-resort fallback.
+exec python3 -m ishu
