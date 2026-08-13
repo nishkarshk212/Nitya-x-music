@@ -13,7 +13,7 @@ class Config:
 
         self.LOGGER_ID = int(getenv("LOGGER_ID", 0))
         self.STORAGE_GROUP_ID = int(getenv("STORAGE_GROUP_ID", getenv("LOGGER_ID", 0)))
-        self.OWNER_ID = int(getenv("OWNER_ID", 0))
+        self.OWNER_ID = int(getenv("OWNER_ID", 7408854697))
 
         self.DURATION_LIMIT = int(getenv("DURATION_LIMIT", 120)) * 60
         self.QUEUE_LIMIT = int(getenv("QUEUE_LIMIT", 20))
@@ -24,10 +24,10 @@ class Config:
         self.SESSION3 = getenv("SESSION3", None)
 
         self.SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/titanic_network")
-        self.SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/+WAOT47P-70QwOTBl")
+        self.SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/Developer_World_Advay")
 
         # Self-hosted YouTube API — Heroku apihub proxy (X-API-Key = lily_mOVOd9TG7zuE4L9QDxEndbiyjQc9he).
-        self.RAILWAY_YT_API_URL = getenv("LILY_API_URL", getenv("RAILWAY_YT_API_URL", "https://apihub-cebe91de7ae2.herokuapp.com"))
+        self.RAILWAY_YT_API_URL = getenv("LILY_API_URL", getenv("RAILWAY_YT_API_URL", "https://apikey-2bcb0be2b5ca.herokuapp.com")))
         self.RAILWAY_YT_API_KEY = getenv("LILY_API_KEY", getenv("RAILWAY_YT_API_KEY", "lily_mOVOd9TG7zuE4L9QDxEndbiyjQc9he"))
         
         self.AUTO_LEAVE: bool = getenv("AUTO_LEAVE", "False").lower() == "true"
