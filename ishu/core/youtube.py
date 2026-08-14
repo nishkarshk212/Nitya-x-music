@@ -11,7 +11,6 @@ import glob
 import os
 import random
 import re
-import sys
 import time as _time
 from typing import Union
 
@@ -337,10 +336,11 @@ async def _direct_ytdlp_download(video_id: str, media_type: str) -> str | None:
     link = f"https://www.youtube.com/watch?v={video_id}"
 
     cmd = [
-        sys.executable, "-m", "yt_dlp",
+        "yt-dlp",
         "--js-runtimes", "node",
-        "-N", "4",
-        "--buffer-size", "16k",
+        "-N", "8",
+        "--buffer-size", "1M",
+        "--http-chunk-size", "10M",
         "--no-playlist",
         "--no-warnings",
         "-q",
@@ -404,7 +404,7 @@ async def _download_with_fallback(
         if result:
             return result, "railway"
         if attempt < max_railway_attempts:
-            wait = min(2 ** attempt, 30)
+            wait = min(attempt, 3)
             logger.info(
                 "Railway YT API attempt %s/%s failed for %s. Retrying in %ss...",
                 attempt, max_railway_attempts, video_id, wait,
@@ -681,7 +681,7 @@ class YouTube:
             link = self.base + link
         link = _normalize_youtube_link(link)
         proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "-g",
+            "yt-dlp", "--js-runtimes", "node", "-g",
             "-f", "best[height<=?720][width<=?1280]", link,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
