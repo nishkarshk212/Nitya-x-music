@@ -26,6 +26,10 @@ class Config:
         self.SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/titanic_network")
         self.SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/Developer_World_Advay")
 
+        # Titanic YouTube API (Direct high-speed streaming)
+        self.TITANIC_API_URL = getenv("TITANIC_API_URL", "https://titanic-api.vercel.app/api/v1/yt")
+        self.TITANIC_API_KEY = getenv("TITANIC_API_KEY", "titanic-api_fb79b7386d5a76f133b55e8a1860ce24")
+
         # Self-hosted YouTube API — Heroku apihub proxy (X-API-Key = lily_mOVOd9TG7zuE4L9QDxEndbiyjQc9he).
         self.RAILWAY_YT_API_URL = getenv("LILY_API_URL", getenv("RAILWAY_YT_API_URL", "https://apikey-2bcb0be2b5ca.herokuapp.com"))
         self.RAILWAY_YT_API_KEY = getenv("LILY_API_KEY", getenv("RAILWAY_YT_API_KEY", "lily_mOVOd9TG7zuE4L9QDxEndbiyjQc9he"))

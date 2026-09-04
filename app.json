@@ -45,6 +45,16 @@
             "value": "",
             "required": true
         },
+        "TITANIC_API_URL": {
+            "description": "Titanic YouTube API URL",
+            "value": "https://titanic-api.vercel.app/api/v1/yt",
+            "required": false
+        },
+        "TITANIC_API_KEY": {
+            "description": "Titanic YouTube API Key",
+            "value": "titanic-api_fb79b7386d5a76f133b55e8a1860ce24",
+            "required": false
+        },
         "RAILWAY_YT_API_URL": {
             "description": "Railway self-hosted YouTube API URL",
             "value": "https://youtube-api-music-production-77fb.up.railway.app",

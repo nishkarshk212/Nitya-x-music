@@ -25,6 +25,8 @@ from ishu.helpers import utils
 from ishu.helpers._dataclass import Track
 
 # ── Config ────────────────────────────────────────────────────────────────────
+TITANIC_API_URL     = getattr(config, "TITANIC_API_URL",  None) or os.getenv("TITANIC_API_URL", "https://titanic-api.vercel.app/api/v1/yt")
+TITANIC_API_KEY     = getattr(config, "TITANIC_API_KEY",  None) or os.getenv("TITANIC_API_KEY", "titanic-api_fb79b7386d5a76f133b55e8a1860ce24")
 RAILWAY_YT_API_URL  = getattr(config, "RAILWAY_YT_API_URL",  None)
 RAILWAY_YT_API_KEY  = getattr(config, "RAILWAY_YT_API_KEY",  None)
 
@@ -215,8 +217,57 @@ async def _innertube_search(query: str, limit: int = 10) -> list:
         _INNERTUBE_CACHE[cache_key] = (items, now)
         return items
     except Exception as e:
-        logger.debug("InnerTube search failed (%s), falling back to py_yt", e)
+        logger.debug("InnerTube search failed (%s), falling back to Titanic/py_yt", e)
         return []
+
+
+async def _titanic_search(query: str, limit: int = 10) -> list:
+    """
+    Search YouTube via Titanic API (/search endpoint).
+    Returns list of dicts compatible with InnerTube / VideosSearch results.
+    """
+    t_url = TITANIC_API_URL or getattr(config, "TITANIC_API_URL", None) or os.getenv("TITANIC_API_URL", "https://titanic-api.vercel.app/api/v1/yt")
+    t_key = TITANIC_API_KEY or getattr(config, "TITANIC_API_KEY", None) or os.getenv("TITANIC_API_KEY", "titanic-api_fb79b7386d5a76f133b55e8a1860ce24")
+    if not t_url or not t_key:
+        return []
+    try:
+        session = _get_http_session()
+        params = {"q": query, "maxResults": str(limit)}
+        async with session.get(
+            f"{t_url.rstrip('/')}/search",
+            params=params,
+            headers={"x-api-key": str(t_key), "User-Agent": "TitanicBot/1.0"},
+            timeout=aiohttp.ClientTimeout(total=8),
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json(content_type=None)
+                raw = data.get("results", [])
+                out = []
+                for item in raw:
+                    vid = item.get("id")
+                    title = item.get("title")
+                    if not vid or not title:
+                        continue
+                    dur_sec = item.get("duration") or 0
+                    if isinstance(dur_sec, (int, float)):
+                        m, s = divmod(int(dur_sec), 60)
+                        h, m = divmod(m, 60)
+                        dur_text = f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+                    else:
+                        dur_text = str(dur_sec)
+                    out.append({
+                        "id": vid,
+                        "title": title,
+                        "duration": dur_text,
+                        "channel": item.get("uploader") or "",
+                        "thumbnail": item.get("thumbnail") or f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+                        "link": f"https://www.youtube.com/watch?v={vid}",
+                        "viewCount": item.get("view_count"),
+                    })
+                return out
+    except Exception as e:
+        logger.debug("Titanic search failed (%s)", e)
+    return []
 
 
 async def _race_api_stream(video_id: str, media_type: str = "audio") -> str | None:
@@ -229,6 +280,36 @@ async def _race_api_stream(video_id: str, media_type: str = "audio") -> str | No
         logger.info("[prefetch] ⚡ Instant cache hit for %s", video_id)
         return _PREFETCH_CACHE[video_id]
 
+    tasks = []
+
+    # 1. Probe Titanic API
+    t_url = TITANIC_API_URL or getattr(config, "TITANIC_API_URL", None) or os.getenv("TITANIC_API_URL", "https://titanic-api.vercel.app/api/v1/yt")
+    t_key = TITANIC_API_KEY or getattr(config, "TITANIC_API_KEY", None) or os.getenv("TITANIC_API_KEY", "titanic-api_fb79b7386d5a76f133b55e8a1860ce24")
+
+    async def _probe_titanic() -> str | None:
+        if not t_url or not t_key:
+            return None
+        try:
+            session = _get_http_session()
+            async with session.get(
+                f"{t_url.rstrip('/')}/videos?id={video_id}",
+                headers={"x-api-key": str(t_key), "User-Agent": "Mozilla/5.0"},
+                timeout=aiohttp.ClientTimeout(connect=3, total=15),
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    s_url = data.get("video", {}).get("stream_url")
+                    if s_url:
+                        logger.info("[race] ✓ Titanic API won for %s", video_id)
+                        return s_url
+        except Exception:
+            pass
+        return None
+
+    if t_url and t_key:
+        tasks.append(asyncio.create_task(_probe_titanic()))
+
+    # 2. Probe Railway / Lily servers
     api_servers = []
     for url_var, key_var in [
         ("RAILWAY_YT_API_URL",  "RAILWAY_YT_API_KEY"),
@@ -242,9 +323,6 @@ async def _race_api_stream(video_id: str, media_type: str = "audio") -> str | No
             entry = (url.rstrip("/"), key)
             if entry not in api_servers:
                 api_servers.append(entry)
-
-    if not api_servers:
-        return None
 
     endpoint = "play/video/hq" if media_type == "video" else "play/audio"
 
@@ -265,12 +343,16 @@ async def _race_api_stream(video_id: str, media_type: str = "audio") -> str | No
             pass
         return None
 
-    tasks = [asyncio.create_task(_probe(url, key)) for url, key in api_servers]
+    for url, key in api_servers:
+        tasks.append(asyncio.create_task(_probe(url, key)))
+
+    if not tasks:
+        return None
+
     try:
         for coro in asyncio.as_completed(tasks):
             result = await coro
             if result:
-                # Cancel remaining to avoid waste
                 for t in tasks:
                     if not t.done():
                         t.cancel()
@@ -436,7 +518,111 @@ def _extract_video_id(link: str) -> str | None:
     return cleaned if len(cleaned) == 11 else None
 
 
-# ── Downloader: Railway YT API + Direct yt-dlp Fallback ───────────────────
+# ── Downloader: Titanic API (Primary) + Railway YT API + Direct yt-dlp Fallback
+async def _titanic_download(video_id: str, media_type: str) -> str | None:
+    """
+    Download via Titanic API (https://titanic-api.vercel.app/api/v1/yt).
+    Fetches direct stream URL from Titanic API and streams to local disk.
+    Returns local file path on success, None on failure.
+    """
+    api_url = TITANIC_API_URL or getattr(config, "TITANIC_API_URL", None) or os.getenv("TITANIC_API_URL", "https://titanic-api.vercel.app/api/v1/yt")
+    api_key = TITANIC_API_KEY or getattr(config, "TITANIC_API_KEY", None) or os.getenv("TITANIC_API_KEY", "titanic-api_fb79b7386d5a76f133b55e8a1860ce24")
+
+    if not api_url or not api_key:
+        return None
+
+    api_url = api_url.rstrip("/")
+    ext = "mp4" if media_type == "video" else "mp3"
+    file_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
+
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+        try:
+            os.utime(file_path, None)
+        except Exception:
+            pass
+        return file_path
+
+    session = _get_http_session()
+    headers = {
+        "x-api-key": str(api_key),
+        "User-Agent": "TitanicBot/1.0",
+    }
+    stream_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://www.youtube.com/",
+    }
+
+    stream_urls = []
+
+    # 1. Fetch from /videos endpoint
+    try:
+        async with session.get(
+            f"{api_url}/videos?id={video_id}",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json(content_type=None)
+                s_url = data.get("video", {}).get("stream_url")
+                if s_url:
+                    stream_urls.append(s_url)
+    except Exception as e:
+        logger.debug("Titanic /videos failed for %s: %s", video_id, e)
+
+    # 2. Fetch from /download endpoint as audio/video fallback
+    try:
+        type_param = "audio" if media_type != "video" else "video"
+        async with session.get(
+            f"{api_url}/download?id={video_id}&type={type_param}&key={api_key}",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json(content_type=None)
+                dl = data.get("download", {})
+                target_key = "best_video_url" if media_type == "video" else "best_audio_url"
+                b_url = dl.get(target_key)
+                if b_url and b_url not in stream_urls:
+                    stream_urls.append(b_url)
+    except Exception as e:
+        logger.debug("Titanic /download failed for %s: %s", video_id, e)
+
+    if not stream_urls:
+        return None
+
+    timeout_dl = 600 if media_type == "video" else 300
+    for s_url in stream_urls:
+        try:
+            async with session.get(
+                s_url,
+                headers=stream_headers,
+                timeout=aiohttp.ClientTimeout(total=timeout_dl),
+                allow_redirects=True,
+            ) as file_resp:
+                if file_resp.status != 200:
+                    logger.warning("Titanic API stream failed: status %s for %s", file_resp.status, video_id)
+                    continue
+
+                with open(file_path, "wb") as fobj:
+                    async for chunk in file_resp.content.iter_chunked(512 * 1024):
+                        fobj.write(chunk)
+
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                    _evict_disk_cache()
+                    logger.info("Titanic API ✓ %s → %s", video_id, file_path)
+                    return file_path
+        except Exception as ep_err:
+            logger.warning("Titanic stream download failed for %s: %s", video_id, ep_err)
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except OSError:
+                pass
+
+    return None
+
+
 async def _railway_download(video_id: str, media_type: str) -> str | None:
     """
     Download via Railway self-hosted YouTube API proxy.
@@ -567,7 +753,7 @@ async def _download_with_fallback(
     media_type: str,
 ) -> tuple[str | None, str]:
     """
-    Download using API Racing (parallel multi-server) -> Railway YT API -> direct yt-dlp fallback.
+    Download using API Racing (parallel multi-server) -> Titanic API -> Railway YT API -> direct yt-dlp fallback.
     Returns (file_path, downloader_name)
     """
     video_id = _extract_video_id(link) or link
@@ -575,7 +761,6 @@ async def _download_with_fallback(
     # ⚡ Step 0: Try prefetch cache & race APIs simultaneously (fastest path)
     raced_url = await _race_api_stream(video_id, media_type)
     if raced_url:
-        # Got a live stream URL — download it via the fastest API
         ext = "mp4" if media_type == "video" else "mp3"
         file_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -583,7 +768,12 @@ async def _download_with_fallback(
             session = _get_http_session()
             async with session.get(
                 raced_url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Referer": "https://www.youtube.com/",
+                },
                 timeout=aiohttp.ClientTimeout(total=300),
+                allow_redirects=True,
             ) as resp:
                 if resp.status == 200:
                     with open(file_path, "wb") as f:
@@ -597,8 +787,13 @@ async def _download_with_fallback(
         except Exception as e:
             logger.warning("[race] Download from raced URL failed for %s: %s", video_id, e)
 
-    # Step 1: Single Railway API (with retries)
-    max_railway_attempts = 3
+    # Step 1: Titanic API (Primary high-speed YouTube API)
+    result = await _titanic_download(video_id, media_type)
+    if result:
+        return result, "titanic"
+
+    # Step 2: Single Railway API (with retries)
+    max_railway_attempts = 2
     for attempt in range(1, max_railway_attempts + 1):
         result = await _railway_download(video_id, media_type)
         if result:
@@ -647,7 +842,10 @@ class YouTube:
 
         self.dl_stats = {
             "total_requests": 0,
+            "titanic":        0,
+            "race":           0,
             "railway":        0,
+            "yt-dlp":         0,
             "failed":         0,
         }
 
@@ -766,8 +964,10 @@ class YouTube:
             ] if not explicit_avoid else [query.strip()]
 
             for sq in search_queries:
-                # ⚡ Try ultra-fast InnerTube first (~150ms), fallback to py_yt
+                # ⚡ Try ultra-fast InnerTube first (~150ms), fallback to Titanic API, then py_yt
                 raw_results = await _innertube_search(sq, limit=10)
+                if not raw_results:
+                    raw_results = await _titanic_search(sq, limit=10)
                 if not raw_results:
                     results = VideosSearch(sq, limit=10)
                     raw_results = (await results.next())["result"]
