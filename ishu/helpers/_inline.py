@@ -122,17 +122,25 @@ class Inline:
                     ]
                 )
 
+            bottom_row = []
             if autoplay:
-                keyboard.append(
-                    [
-                        self.ikb(
-                            text="YouTube",
-                            callback_data=f"youtube_menu {chat_id}",
-                            style=enums.ButtonStyle.DANGER,
-                            icon_custom_emoji_id="5321505140199418151",
-                        )
-                    ]
+                bottom_row.append(
+                    self.ikb(
+                        text="YouTube",
+                        callback_data=f"youtube_menu {chat_id}",
+                        style=enums.ButtonStyle.DANGER,
+                        icon_custom_emoji_id="5321505140199418151",
+                    )
                 )
+            bottom_row.append(
+                self.ikb(
+                    text="⚡ ᴀᴘɪ ʜᴇᴀʟᴛʜ",
+                    callback_data=f"api_health {chat_id}",
+                    style=enums.ButtonStyle.PRIMARY,
+                    icon_custom_emoji_id="5422826721541914133",
+                )
+            )
+            keyboard.append(bottom_row)
 
         # Cache the resolved panel so the next partial re-render keeps these
         # rows (timer updater <-> autoplay toggle no longer clobber each other).
@@ -337,10 +345,28 @@ class Inline:
                 [
                     self.ikb(text=lang["support"], url=config.SUPPORT_CHAT, style=enums.ButtonStyle.SUCCESS, icon_custom_emoji_id="5422782960120134635"),
                     self.ikb(text=lang["channel"], url=config.SUPPORT_CHANNEL, style=enums.ButtonStyle.SUCCESS, icon_custom_emoji_id="5422357698228290320"),
+                ],
+                [
+                    self.ikb(
+                        text="⚡ ᴀᴘɪ ʜᴇᴀʟᴛʜ",
+                        callback_data="api_health",
+                        style=enums.ButtonStyle.PRIMARY,
+                        icon_custom_emoji_id="5422826721541914133",
+                    )
                 ]
             ]
         else:
-            rows += [[self.ikb(text=lang["language"], callback_data="language", style=enums.ButtonStyle.PRIMARY, icon_custom_emoji_id="5422826721541914133")]]
+            rows += [
+                [
+                    self.ikb(text=lang["language"], callback_data="language", style=enums.ButtonStyle.PRIMARY, icon_custom_emoji_id="5422826721541914133"),
+                    self.ikb(
+                        text="⚡ ᴀᴘɪ ʜᴇᴀʟᴛʜ",
+                        callback_data="api_health",
+                        style=enums.ButtonStyle.PRIMARY,
+                        icon_custom_emoji_id="5422826721541914133",
+                    ),
+                ]
+            ]
         return self.ikm(rows)
 
     def yt_key(self, link: str) -> types.InlineKeyboardMarkup:

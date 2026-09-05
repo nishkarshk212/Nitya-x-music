@@ -416,3 +416,100 @@ async def _stats_cb(_, query: types.CallbackQuery):
             )
         except Exception:
             pass
+
+
+@app.on_callback_query(filters.regex(r"^api_health") & ~app.bl_users)
+async def _api_health_cb(_, query: types.CallbackQuery):
+    import time
+    import aiohttp
+    import os
+    t0 = time.time()
+
+    t_url = getattr(config, "TITANIC_API_URL", None) or os.getenv("TITANIC_API_URL", "https://titanic-api.vercel.app/api/v1/yt")
+    t_key = getattr(config, "TITANIC_API_KEY", None) or os.getenv("TITANIC_API_KEY", "titanic-api_fb79b7386d5a76f133b55e8a1860ce24")
+
+    api_status = "🔴 Offline"
+    latency_str = "--"
+    try:
+        from ishu.core.youtube import _get_http_session
+        session = _get_http_session()
+        async with session.get(
+            f"{t_url.rstrip('/')}/search?q=test&maxResults=1",
+            headers={"x-api-key": str(t_key), "User-Agent": "TitanicBot/1.0"},
+            timeout=aiohttp.ClientTimeout(total=4),
+        ) as resp:
+            elapsed = int((time.time() - t0) * 1000)
+            if resp.status == 200:
+                api_status = "🟢 Online"
+                latency_str = f"{elapsed}ms"
+            else:
+                api_status = f"🟡 HTTP {resp.status}"
+                latency_str = f"{elapsed}ms"
+    except Exception:
+        api_status = "🔴 Timeout/Error"
+        latency_str = "N/A"
+
+    alert_msg = (
+        "⚡ ᴛɪᴛᴀɴɪᴄ ᴧᴘɪ ʜᴇᴧʟᴛʜ ⚡\n"
+        "──────────────────\n"
+        f"📡 ꜱᴛᴀᴛᴜꜱ: {api_status}\n"
+        f"⚡ ᴘɪɴɢ: {latency_str}\n"
+        "🎵 ᴇɴɢɪɴᴇ: ᴛɪᴛᴀɴɪᴄ ꜱᴛʀᴇᴀᴍ ᴠ1\n"
+        "🚀 ᴄᴀᴄʜᴇ: ʀᴇᴅɪꜱ + ꜱꜱᴅ ᴀᴄᴛɪᴠᴇ\n"
+        "──────────────────\n"
+        "✨ ꜱʏꜱᴛᴇᴍ ᴏᴘᴇʀᴀᴛɪᴏɴᴀʟ!"
+    )
+    try:
+        await query.answer(alert_msg, show_alert=True)
+    except Exception:
+        try:
+            await query.answer(f"Titanic API: {api_status} ({latency_str})", show_alert=False)
+        except Exception:
+            pass
+
+
+@app.on_message(filters.command(["apihealth", "health"]) & ~app.bl_users)
+async def _api_health_cmd(_, m: types.Message):
+    import time
+    import aiohttp
+    import os
+    t0 = time.time()
+
+    t_url = getattr(config, "TITANIC_API_URL", None) or os.getenv("TITANIC_API_URL", "https://titanic-api.vercel.app/api/v1/yt")
+    t_key = getattr(config, "TITANIC_API_KEY", None) or os.getenv("TITANIC_API_KEY", "titanic-api_fb79b7386d5a76f133b55e8a1860ce24")
+
+    msg = await m.reply_text("<blockquote><b>⚡ ᴘʀᴏʙɪɴɢ ᴛɪᴛᴀɴɪᴄ ᴧᴘɪ...</b></blockquote>", parse_mode=enums.ParseMode.HTML)
+
+    api_status = "🔴 Offline"
+    latency_str = "--"
+    try:
+        from ishu.core.youtube import _get_http_session
+        session = _get_http_session()
+        async with session.get(
+            f"{t_url.rstrip('/')}/search?q=test&maxResults=1",
+            headers={"x-api-key": str(t_key), "User-Agent": "TitanicBot/1.0"},
+            timeout=aiohttp.ClientTimeout(total=5),
+        ) as resp:
+            elapsed = int((time.time() - t0) * 1000)
+            if resp.status == 200:
+                api_status = "🟢 Online (200 OK)"
+                latency_str = f"{elapsed}ms"
+            else:
+                api_status = f"🟡 HTTP {resp.status}"
+                latency_str = f"{elapsed}ms"
+    except Exception as e:
+        api_status = f"🔴 Failed ({type(e).__name__})"
+        latency_str = "N/A"
+
+    text = (
+        "<blockquote><b>⚡ ᴛ ɪ ᴛ ᴀ ɴ ɪ ᴄ   ᴀ ᴘ ɪ   ʜ ᴇ ᴀ ʟ ᴛ ʜ\n"
+        "──────────────────\n"
+        f"📡 ᴜʀʟ : {t_url}\n"
+        f"🌐 ꜱᴛᴀᴛᴜꜱ : {api_status}\n"
+        f"⚡ ʟᴀᴛᴇɴᴄʏ : {latency_str}\n"
+        "🎵 ᴍᴏᴅᴇ : ᴅɪʀᴇᴄᴛ ʜɪɢʜ-ꜱᴘᴇᴇᴅ ꜱᴛʀᴇᴀᴍ\n"
+        "🚀 ᴄᴀᴄʜᴇ : ʀᴇᴅɪꜱ ʀᴀᴍ + ᴛɢ ᴅᴜᴍᴘ + ꜱꜱᴅ\n"
+        "──────────────────\n"
+        "✨ ᴀʟʟ ꜱʏꜱᴛᴇᴍꜱ ᴏᴘᴇʀᴀᴛɪᴏɴᴀʟ!</b></blockquote>"
+    )
+    await msg.edit_text(text, parse_mode=enums.ParseMode.HTML)
