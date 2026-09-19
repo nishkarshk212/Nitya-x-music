@@ -18,6 +18,8 @@ class Media:
     url: str | None = None
     time: int = 0
     user: str | None = None
+    user_id: int | None = None
+    user_photo: str | None = None
     video: bool = False
     # Chat id the track originated from (set at play time) so background /
     # error logging knows where to report a playback failure.
@@ -38,6 +40,8 @@ class Track:
     time: int = 0
     thumbnail: str | None = None
     user: str | None = None
+    user_id: int | None = None
+    user_photo: str | None = None
     view_count: str | None = None
     video: bool = False
     # Chat id the track originated from (set at play time) so background /
