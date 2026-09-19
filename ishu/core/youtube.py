@@ -324,39 +324,47 @@ def cookie_txt_file() -> str | None:
 
     Priority:
     1. Already resolved & cached (_COOKIE_PATH set).
-    2. Decoded from YTDLP_COOKIES_BASE64 / YOUTUBE_COOKIES_BASE64 env var (immediate config-var updates).
-    3. Physical file at ishu/cookies/cookie_0.txt.
+    2. Physical file at ishu/cookies/cookie_0.txt.
+    3. Decoded from YTDLP_COOKIES_BASE64 / YOUTUBE_COOKIES_BASE64 env var.
     4. Raw text from COOKIES_DATA env var.
     """
     global _COOKIE_PATH
-    if _COOKIE_PATH is not None:
+    if _COOKIE_PATH is not None and os.path.exists(_COOKIE_PATH) and os.path.getsize(_COOKIE_PATH) > 0:
         return _COOKIE_PATH
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     folder = os.path.abspath(os.path.join(base_dir, "..", "cookies"))
     primary = os.path.join(folder, "cookie_0.txt")
 
-    # 1. Decode from YTDLP_COOKIES_BASE64 env var (takes precedence for config-var updates)
+    # 1. Physical file already present with valid content
+    if os.path.exists(primary) and os.path.getsize(primary) > 0:
+        _COOKIE_PATH = primary
+        return primary
+
+    # 2. Decode from YTDLP_COOKIES_BASE64 env var
     b64 = os.environ.get("YTDLP_COOKIES_BASE64") or os.environ.get("YOUTUBE_COOKIES_BASE64") or os.environ.get("COOKIES_BASE64")
     if b64:
         try:
             import base64, gzip as _gzip
-            raw = base64.b64decode(b64)
+            b64_clean = b64.strip()
+            b64_clean += "=" * (-len(b64_clean) % 4)
+            raw = base64.b64decode(b64_clean)
+            decoded = None
             if raw[:2] == b"\x1f\x8b":  # gzip magic bytes
-                raw = _gzip.decompress(raw)
-            decoded = raw.decode("utf-8")
-            os.makedirs(folder, exist_ok=True)
-            with open(primary, "w", encoding="utf-8") as f:
-                f.write(decoded)
-            _COOKIE_PATH = primary
-            return primary
+                try:
+                    decoded = _gzip.decompress(raw).decode("utf-8", errors="ignore")
+                except Exception:
+                    pass
+            if not decoded:
+                decoded = raw.decode("utf-8", errors="ignore")
+            if decoded and ("youtube.com" in decoded or "google.com" in decoded):
+                os.makedirs(folder, exist_ok=True)
+                with open(primary, "w", encoding="utf-8") as f:
+                    f.write(decoded)
+                _COOKIE_PATH = primary
+                return primary
         except Exception as e:
             logger.warning("cookie_txt_file: failed to decode base64 cookies: %s", e)
-
-    # 2. Physical file already present
-    if os.path.exists(primary) and os.path.getsize(primary) > 0:
-        _COOKIE_PATH = primary
-        return primary
 
     # 3. Raw Netscape cookie text from COOKIES_DATA env var
     raw_data = os.environ.get("COOKIES_DATA", "").strip()
@@ -608,15 +616,64 @@ async def _direct_ytdlp_download(video_id: str, media_type: str) -> str | None:
 
 # Fleet fallback removed — bots use only their assigned API + direct yt-dlp.
 # This avoids cross-bot API quota exhaustion and unpredictable latency spikes.
-FLEET_FALLBACK_APIS: list = []
+FLEET_FALLBACK_APIS: list[tuple[str, str]] = [
+    ("https://noah-api-v3-12d3419875af.herokuapp.com", "Noah-LrTinhpR67h7C_HoCGykI9wHARDRJPJVz3TwBSq6wd4"),
+    ("https://apikey-v3-1854882f97a1.herokuapp.com", "lily_mOVOd9TG7zuE4L9QDxEndbiyjQc9he"),
+    ("https://panda-api-v3-6e9434966ef9.herokuapp.com", "panda_qpyudLY8bF8rFt69yK-fbLU5wQSO1nHK9H4GixjYNTY"),
+    ("https://titanic-api-v3-01462a8481af.herokuapp.com", "titanic_lhQkzaBhIQTwpquq_XBIfBI52wtN49fhdTOBBBkfLNo"),
+    ("https://fast-api-v3-b7014eeb7106.herokuapp.com", "fastapi_2PifF1fuHEYA11VVpxT0keDnf-MhovkIaCbiDqXrUK0"),
+    ("https://apihub-v3-9d48fbce0605.herokuapp.com", "lily_mOVOd9TG7zuE4L9QDxEndbiyjQc9he"),
+    ("https://publicapi-v3-d949abed7191.herokuapp.com", "lily_mOVOd9TG7zuE4L9QDxEndbiyjQc9he"),
+]
+
+async def _download_from_api_url(
+    base_url: str,
+    api_key: str,
+    video_id: str,
+    endpoint: str,
+    file_path: str,
+    session: aiohttp.ClientSession,
+) -> bool:
+    """Download audio/video stream from an API endpoint, returning True only if non-empty."""
+    media_url = f"{base_url.rstrip('/')}/{endpoint}?id={video_id}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-API-Key": str(api_key),
+    }
+    try:
+        timeout = aiohttp.ClientTimeout(connect=10, sock_read=60, total=180)
+        async with session.get(
+            media_url,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=True,
+        ) as resp:
+            if resp.status == 200:
+                with open(file_path, "wb") as f:
+                    async for chunk in resp.content.iter_chunked(512 * 1024):
+                        f.write(chunk)
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                    return True
+                else:
+                    logger.warning("API download from %s returned 0 bytes for %s", base_url, video_id)
+            else:
+                logger.warning("API download status %s from %s for %s", resp.status, base_url, video_id)
+    except Exception as e:
+        logger.warning("API download from %s failed for %s: %s", base_url, video_id, e)
+    finally:
+        if os.path.exists(file_path) and os.path.getsize(file_path) == 0:
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+    return False
 
 async def _download_with_fallback(
     link: str,
     media_type: str,
 ) -> tuple[str | None, str]:
     """
-    Download song/video via ONLY the bot's assigned API, then direct yt-dlp.
-    No fleet fallbacks — each bot is self-contained.
+    Download song/video via primary configured API, then fleet fallback APIs, then direct yt-dlp.
     Returns (file_path, downloader_name)
     """
     video_id = _extract_video_id(link) or link
@@ -630,48 +687,36 @@ async def _download_with_fallback(
     endpoint = "play/video/hq" if media_type == "video" else "play/audio"
     session = _get_http_session()
 
-    base_url, api_key = _get_single_api_endpoint()
-    if base_url and api_key:
-        media_url = f"{base_url}/{endpoint}?id={video_id}"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "X-API-Key": str(api_key),
-        }
-        try:
-            timeout = aiohttp.ClientTimeout(connect=15, sock_read=120, total=None)
-            async with session.get(
-                media_url,
-                headers=headers,
-                timeout=timeout,
-                allow_redirects=True,
-            ) as resp:
-                if resp.status == 200:
-                    with open(file_path, "wb") as f:
-                        async for chunk in resp.content.iter_chunked(512 * 1024):
-                            f.write(chunk)
-                    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                        _evict_disk_cache()
-                        logger.info("API download ✓ %s via %s (%d bytes)", video_id, base_url, os.path.getsize(file_path))
-                        return file_path, "api"
-                else:
-                    logger.warning("API download status %s from %s for %s", resp.status, base_url, video_id)
-        except Exception as e:
-            logger.warning("API download from %s failed for %s: %s", base_url, video_id, e)
-        finally:
-            if os.path.exists(file_path) and os.path.getsize(file_path) == 0:
-                try:
-                    os.remove(file_path)
-                except OSError:
-                    pass
+    # Build candidate APIs: Primary first, followed by fleet fallbacks
+    candidates: list[tuple[str, str]] = []
+    seen: set[str] = set()
 
-    # Direct yt-dlp download on dyno (quickjs, cookies from env)
-    logger.warning("Assigned API failed/unavailable for %s. Attempting direct yt-dlp...", video_id)
+    primary_url, primary_key = _get_single_api_endpoint()
+    if primary_url and primary_key:
+        candidates.append((primary_url.rstrip("/"), primary_key))
+        seen.add(primary_url.rstrip("/"))
+
+    for fb_url, fb_key in FLEET_FALLBACK_APIS:
+        clean_url = fb_url.rstrip("/")
+        if clean_url not in seen:
+            candidates.append((clean_url, fb_key))
+            seen.add(clean_url)
+
+    for api_url, api_key in candidates:
+        success = await _download_from_api_url(api_url, api_key, video_id, endpoint, file_path, session)
+        if success:
+            _evict_disk_cache()
+            logger.info("API download ✓ %s via %s (%d bytes)", video_id, api_url, os.path.getsize(file_path))
+            return file_path, "api"
+
+    # Direct yt-dlp download on dyno (quickjs, cookies from env or file)
+    logger.warning("All APIs failed for %s. Attempting direct yt-dlp...", video_id)
     direct_res = await _direct_ytdlp_download(video_id, media_type)
     if direct_res:
         logger.info("Direct yt-dlp succeeded for %s: %s", video_id, direct_res)
         return direct_res, "yt-dlp"
 
-    logger.error("Download failed for %s via assigned API and direct yt-dlp", video_id)
+    logger.error("Download failed for %s via all APIs and direct yt-dlp", video_id)
     await _notify_download_failure(video_id, media_type)
     return None, "none"
 
