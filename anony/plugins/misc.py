@@ -57,7 +57,7 @@ async def _vc_started(_, m: types.Message):
             vc_url = f"https://t.me/c/{c_id}?videochat"
 
         markup = types.InlineKeyboardMarkup(
-            [[types.InlineKeyboardButton(text="💫 JOIN VC", url=vc_url)]]
+            [[types.InlineKeyboardButton(text="💫 JOIN VC", url=vc_url, style=enums.ButtonStyle.SUCCESS)]]
         )
 
         await m.reply_text(text, reply_markup=markup, disable_web_page_preview=True)

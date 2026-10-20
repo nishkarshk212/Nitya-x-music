@@ -9,6 +9,7 @@ from pathlib import Path
 from ntgcalls import (ConnectionNotFound, TelegramServerError,
                       RTMPStreamingUnsupported, ConnectionError,
                       TransportParseException)
+from pyrogram import enums
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import (ChatSendMediaForbidden, ChatSendPhotosForbidden,
                              MessageIdInvalid)
@@ -618,7 +619,7 @@ class TgCall(PyTgCalls):
                 vc_url = f"https://t.me/c/{c_id}?videochat"
 
             markup = InlineKeyboardMarkup(
-                [[InlineKeyboardButton(text="💫 JOIN VC", url=vc_url)]]
+                [[InlineKeyboardButton(text="💫 JOIN VC", url=vc_url, style=enums.ButtonStyle.SUCCESS)]]
             )
 
             sent_msg = await app.send_message(
