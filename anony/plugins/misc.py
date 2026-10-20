@@ -51,10 +51,18 @@ async def _vc_started(_, m: types.Message):
         )
 
         if m.chat.username:
-            vc_url = f"https://t.me/{m.chat.username}?videochat"
+            u = str(m.chat.username).lstrip("@")
+            vc_url = f"https://t.me/{u}?videochat"
+        elif getattr(m.chat, "invite_link", None):
+            vc_url = f"{m.chat.invite_link}?videochat"
         else:
             c_id = str(m.chat.id).replace("-100", "").replace("-", "")
             vc_url = f"https://t.me/c/{c_id}?videochat"
+
+        try:
+            anon._chat_vc_urls[m.chat.id] = vc_url
+        except Exception:
+            pass
 
         markup = types.InlineKeyboardMarkup(
             [[types.InlineKeyboardButton(text="💫 JOIN VC", url=vc_url, style=enums.ButtonStyle.SUCCESS)]]

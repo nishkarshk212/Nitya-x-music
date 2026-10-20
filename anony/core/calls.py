@@ -35,6 +35,7 @@ class TgCall(PyTgCalls):
         self.empty_prompt_msg = {}
         self._vc_join_cooldown = {}
         self.group_call_chats = {}
+        self._chat_vc_urls = {}
 
     async def _dl_worker(self):
         while True:
@@ -606,17 +607,23 @@ class TgCall(PyTgCalls):
                 f"ⓘ AUTH - {role}</b></blockquote>"
             )
 
-            chat = None
-            try:
-                chat = await app.get_chat(chat_id)
-            except Exception:
-                pass
+            vc_url = self._chat_vc_urls.get(chat_id)
+            if not vc_url:
+                chat = None
+                try:
+                    chat = await app.get_chat(chat_id)
+                except Exception:
+                    pass
 
-            if chat and getattr(chat, "username", None):
-                vc_url = f"https://t.me/{chat.username}?videochat"
-            else:
-                c_id = str(chat_id).replace("-100", "").replace("-", "")
-                vc_url = f"https://t.me/c/{c_id}?videochat"
+                if chat and getattr(chat, "username", None):
+                    u = str(chat.username).lstrip("@")
+                    vc_url = f"https://t.me/{u}?videochat"
+                elif chat and getattr(chat, "invite_link", None):
+                    vc_url = f"{chat.invite_link}?videochat"
+                else:
+                    c_id = str(chat_id).replace("-100", "").replace("-", "")
+                    vc_url = f"https://t.me/c/{c_id}?videochat"
+                self._chat_vc_urls[chat_id] = vc_url
 
             markup = InlineKeyboardMarkup(
                 [[InlineKeyboardButton(text="💫 JOIN VC", url=vc_url, style=enums.ButtonStyle.SUCCESS)]]
