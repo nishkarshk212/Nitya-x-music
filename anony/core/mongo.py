@@ -53,6 +53,12 @@ class MongoDB:
         self.songsdb = self.db.songs
         self.autoplay = {}
         self.autoplaydb = self.db.autoplay
+        self.welcome = {}
+        self.welcomedb = self.db.welcome
+        self.vc_notify = {}
+        self.vc_notifydb = self.db.vc_notify
+        self.play_thumb = {}
+        self.play_thumbdb = self.db.play_thumb
 
     async def connect(self) -> None:
         """Check if we can connect to the database.
@@ -122,6 +128,31 @@ class MongoDB:
             upsert=True,
         )
 
+    # WELCOME METHODS
+    async def is_welcome(self, chat_id: int) -> bool:
+        if not hasattr(self, "welcome"):
+            self.welcome = {}
+            self.welcomedb = self.db.welcome
+        if chat_id not in self.welcome:
+            doc = await self.welcomedb.find_one({"_id": chat_id})
+            if doc is not None:
+                self.welcome[chat_id] = doc.get("status", True)
+            else:
+                self.welcome[chat_id] = True
+        return self.welcome[chat_id]
+
+    async def set_welcome(self, chat_id: int, status: bool) -> None:
+        if not hasattr(self, "welcome"):
+            self.welcome = {}
+            self.welcomedb = self.db.welcome
+        self.welcome[chat_id] = status
+        await self.welcomedb.update_one(
+            {"_id": chat_id},
+            {"$set": {"status": status}},
+            upsert=True,
+        )
+
+    # VC NOTIFY METHODS
     async def is_vc_notify(self, chat_id: int) -> bool:
         if not hasattr(self, "vc_notify"):
             self.vc_notify = {}
@@ -140,6 +171,30 @@ class MongoDB:
             self.vc_notifydb = self.db.vc_notify
         self.vc_notify[chat_id] = status
         await self.vc_notifydb.update_one(
+            {"_id": chat_id},
+            {"$set": {"status": status}},
+            upsert=True,
+        )
+
+    # PLAY THUMBNAIL METHODS
+    async def is_play_thumb(self, chat_id: int) -> bool:
+        if not hasattr(self, "play_thumb"):
+            self.play_thumb = {}
+            self.play_thumbdb = self.db.play_thumb
+        if chat_id not in self.play_thumb:
+            doc = await self.play_thumbdb.find_one({"_id": chat_id})
+            if doc is not None:
+                self.play_thumb[chat_id] = doc.get("status", True)
+            else:
+                self.play_thumb[chat_id] = True
+        return self.play_thumb[chat_id]
+
+    async def set_play_thumb(self, chat_id: int, status: bool) -> None:
+        if not hasattr(self, "play_thumb"):
+            self.play_thumb = {}
+            self.play_thumbdb = self.db.play_thumb
+        self.play_thumb[chat_id] = status
+        await self.play_thumbdb.update_one(
             {"_id": chat_id},
             {"$set": {"status": status}},
             upsert=True,

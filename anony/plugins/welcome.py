@@ -24,6 +24,9 @@ async def _welcome_member(_, message: types.Message):
     if message.chat.type in (enums.ChatType.SUPERGROUP, enums.ChatType.GROUP):
         asyncio.create_task(db.add_chat(message.chat.id))
 
+    if not await db.is_welcome(message.chat.id):
+        return
+
     logger.info(f"new_chat_members triggered in chat {message.chat.id} ({message.chat.title})")
 
     for member in message.new_chat_members:
@@ -67,4 +70,45 @@ async def _welcome_member(_, message: types.Message):
             asyncio.create_task(_auto_delete_message(welcome_msg, 3))
         except Exception as e:
             logger.exception(f"Error sending welcome message for member {member.id}: {e}")
+
+
+@app.on_message(filters.command(["welcome"]) & filters.group & ~app.bl_users)
+async def _welcome_cmd(_, message: types.Message):
+    if not message.from_user:
+        return
+    # check admin permissions
+    member = await message.chat.get_member(message.from_user.id)
+    if member.status not in (enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER):
+        return await message.reply_text("» Only administrators can configure welcome settings.")
+
+    args = message.text.split()
+    chat_id = message.chat.id
+    current_status = await db.is_welcome(chat_id)
+
+    if len(args) > 1:
+        state = args[1].lower()
+        if state in ("on", "enable", "true", "yes"):
+            await db.set_welcome(chat_id, True)
+            return await message.reply_text("✅ <b>Welcome messages have been enabled.</b>")
+        elif state in ("off", "disable", "false", "no"):
+            await db.set_welcome(chat_id, False)
+            return await message.reply_text("❌ <b>Welcome messages have been disabled.</b>")
+
+    # Toggle or show status
+    status_str = "Enabled" if current_status else "Disabled"
+    toggle_text = "Disable" if current_status else "Enable"
+    buttons_list = [
+        [
+            types.InlineKeyboardButton(
+                text=f"{toggle_text} Welcome",
+                callback_data=f"settings welcome",
+            )
+        ]
+    ]
+    await message.reply_text(
+        f"<b>Welcome Banner Settings:</b>\n\n"
+        f"Current status: <b>{status_str}</b>\n\n"
+        f"Use <code>/welcome enable</code> or <code>/welcome disable</code>, or click below:",
+        reply_markup=types.InlineKeyboardMarkup(buttons_list),
+    )
 

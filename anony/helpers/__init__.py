@@ -11,6 +11,7 @@ from ._queue import Queue
 from ._thumbnails import Thumbnail
 from ._utilities import Utilities
 from ._welcome import generate_welcome
+from .commands_list import set_suggested_commands
 
 buttons = Inline()
 utils = Utilities()

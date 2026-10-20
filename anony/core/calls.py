@@ -161,6 +161,8 @@ class TgCall(PyTgCalls):
             else None
         ) if config.THUMB_GEN else None
         _thumb = _thumb or config.DEFAULT_THUMB
+        if not await db.is_play_thumb(chat_id):
+            _thumb = None
 
         if not media.file_path:
             await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))

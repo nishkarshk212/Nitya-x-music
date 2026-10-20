@@ -55,3 +55,15 @@ async def _listsudo(_, m: types.Message):
             continue
 
     await sent.edit_text(txt)
+
+
+@app.on_message(filters.command(["setcommands", "updatecommands"]) & app.sudoers)
+async def _set_commands_cmd(_, m: types.Message):
+    sent = await m.reply_text("<blockquote><b>Updating bot suggested commands on Telegram...</b></blockquote>")
+    from anony.helpers.commands_list import set_suggested_commands
+    success = await set_suggested_commands(app)
+    if success:
+        await sent.edit_text("<blockquote><b>✅ Successfully updated all suggested commands on Telegram!</b></blockquote>")
+    else:
+        await sent.edit_text("<blockquote><b>❌ Failed to update bot commands. Check logs.</b></blockquote>")
+

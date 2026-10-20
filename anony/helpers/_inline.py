@@ -336,6 +336,29 @@ class Inline:
             ]
         )
 
+    def settings_text(
+        self,
+        chat_title: str,
+        admin_only: bool,
+        cmd_delete: bool,
+        welcome: bool,
+        vc_notify: bool,
+        play_thumb: bool,
+        language: str,
+    ) -> str:
+        lang_str = lang_codes.get(language, language)
+        return (
+            f"<u><b>{chat_title} Settings</b></u>\n\n"
+            f"⚙️ <b>Current Chat Configuration:</b>\n"
+            f"• <b>Play Mode :</b> <code>{'Admin Only' if admin_only else 'Everyone'}</code>\n"
+            f"• <b>Cmd Delete :</b> <code>{'Enabled' if cmd_delete else 'Disabled'}</code>\n"
+            f"• <b>Welcome Banner :</b> <code>{'Enabled' if welcome else 'Disabled'}</code>\n"
+            f"• <b>VC Join Alert :</b> <code>{'Enabled' if vc_notify else 'Disabled'}</code>\n"
+            f"• <b>Play Thumbnail :</b> <code>{'Enabled' if play_thumb else 'Disabled'}</code>\n"
+            f"• <b>Language :</b> <code>{lang_str}</code>\n\n"
+            f"<i>Click the buttons below to toggle any setting:</i>"
+        )
+
     def settings_markup(
         self,
         lang: dict,
@@ -343,52 +366,75 @@ class Inline:
         cmd_delete: bool,
         language: str,
         chat_id: int,
+        welcome: bool = True,
+        vc_notify: bool = True,
+        play_thumb: bool = True,
     ) -> types.InlineKeyboardMarkup:
+        def _btn(status: bool, cb_data: str):
+            text = "ENABLED" if status else "DISABLED"
+            style = enums.ButtonStyle.SUCCESS if status else enums.ButtonStyle.DANGER
+            return self.ikb(text=text, callback_data=cb_data, style=style)
+
         return self.ikm(
             [
                 [
                     self.ikb(
-                        text=lang["play_mode"] + " ➜",
+                        text=lang.get("play_mode", "Play Mode") + " ➜",
                         callback_data="settings",
                         style=enums.ButtonStyle.DEFAULT,
                     ),
-                    self.ikb(
-                        text=admin_only,
-                        callback_data="settings play",
-                        style=(
-                            enums.ButtonStyle.SUCCESS
-                            if admin_only
-                            else enums.ButtonStyle.DANGER
-                        ),
-                    ),
+                    _btn(admin_only, "settings play"),
                 ],
                 [
                     self.ikb(
-                        text=lang["cmd_delete"] + " ➜",
+                        text=lang.get("cmd_delete", "Cmd Delete") + " ➜",
                         callback_data="settings",
                         style=enums.ButtonStyle.DEFAULT,
                     ),
-                    self.ikb(
-                        text=cmd_delete,
-                        callback_data="settings delete",
-                        style=(
-                            enums.ButtonStyle.SUCCESS
-                            if cmd_delete
-                            else enums.ButtonStyle.DANGER
-                        ),
-                    ),
+                    _btn(cmd_delete, "settings delete"),
                 ],
                 [
                     self.ikb(
-                        text=lang["language"] + " ➜",
+                        text="Welcome ➜",
+                        callback_data="settings",
+                        style=enums.ButtonStyle.DEFAULT,
+                    ),
+                    _btn(welcome, "settings welcome"),
+                ],
+                [
+                    self.ikb(
+                        text="VC Join Msg ➜",
+                        callback_data="settings",
+                        style=enums.ButtonStyle.DEFAULT,
+                    ),
+                    _btn(vc_notify, "settings vc_notify"),
+                ],
+                [
+                    self.ikb(
+                        text="Play Thumb ➜",
+                        callback_data="settings",
+                        style=enums.ButtonStyle.DEFAULT,
+                    ),
+                    _btn(play_thumb, "settings thumb"),
+                ],
+                [
+                    self.ikb(
+                        text=lang.get("language", "Language") + " ➜",
                         callback_data="settings",
                         style=enums.ButtonStyle.DEFAULT,
                     ),
                     self.ikb(
-                        text=lang_codes[language],
+                        text=lang_codes.get(language, language),
                         callback_data="language",
                         style=enums.ButtonStyle.PRIMARY,
                     ),
+                ],
+                [
+                    self.ikb(
+                        text=lang.get("close", "Close"),
+                        callback_data="close",
+                        style=enums.ButtonStyle.DANGER,
+                    )
                 ],
             ]
         )

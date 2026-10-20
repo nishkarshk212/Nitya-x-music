@@ -130,18 +130,45 @@ async def start(_, message: types.Message):
         await db.add_chat(message.chat.id)
 
 
-@app.on_message(filters.command(["playmode", "settings"]) & filters.group & ~app.bl_users)
+@app.on_message(filters.command(["playmode", "settings", "setting", "cplaymode", "csettings"]) & filters.group & ~app.bl_users)
 @lang.language()
 async def settings(_, message: types.Message):
     admin_only = await db.get_play_mode(message.chat.id)
     cmd_delete = await db.get_cmd_delete(message.chat.id)
     _language = await db.get_lang(message.chat.id)
+    _welcome = await db.is_welcome(message.chat.id)
+    _vc_notify = await db.is_vc_notify(message.chat.id)
+    _thumb = await db.is_play_thumb(message.chat.id)
+    chat_title = message.chat.title or "Chat"
     await message.reply_text(
-        text=message.lang["start_settings"].format(message.chat.title),
+        text=buttons.settings_text(
+            chat_title,
+            admin_only,
+            cmd_delete,
+            _welcome,
+            _vc_notify,
+            _thumb,
+            _language,
+        ),
         reply_markup=buttons.settings_markup(
-            message.lang, admin_only, cmd_delete, _language, message.chat.id
+            message.lang,
+            admin_only,
+            cmd_delete,
+            _language,
+            message.chat.id,
+            welcome=_welcome,
+            vc_notify=_vc_notify,
+            play_thumb=_thumb,
         ),
         quote=True,
+    )
+
+
+@app.on_message(filters.command(["playmode", "settings", "setting", "cplaymode", "csettings"]) & filters.private & ~app.bl_users)
+async def settings_pm(_, message: types.Message):
+    await message.reply_text(
+        "<blockquote><b>⚙️ The <code>/settings</code> command is meant for Groups.\n\n"
+        "Add me to your group and send <code>/settings</code> there to configure Welcome messages, VC Join alerts, Thumbnails, and Play mode!</b></blockquote>"
     )
 
 

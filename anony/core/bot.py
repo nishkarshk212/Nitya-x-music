@@ -54,6 +54,12 @@ class Bot(pyrogram.Client):
             raise SystemExit("Please promote the bot as an admin in logger group.")
         logger.info(f"Bot started as @{self.username}")
 
+        try:
+            from anony.helpers.commands_list import set_suggested_commands
+            await set_suggested_commands(self)
+        except Exception as ex:
+            logger.warning(f"Error setting bot commands: {ex}")
+
     async def exit(self):
         """
         Asynchronously stops the bot.

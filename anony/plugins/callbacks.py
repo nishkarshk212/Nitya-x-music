@@ -263,25 +263,63 @@ async def _settings_cb(_, query: types.CallbackQuery):
     cmd = query.data.split()
     if len(cmd) == 1:
         return await query.answer()
-    await query.answer(query.lang["processing"], show_alert=True)
+    await query.answer(query.lang.get("processing", "Processing..."), show_alert=False)
 
     chat_id = query.message.chat.id
     _admin = await db.get_play_mode(chat_id)
     _delete = await db.get_cmd_delete(chat_id)
     _language = await db.get_lang(chat_id)
+    _welcome = await db.is_welcome(chat_id)
+    _vc_notify = await db.is_vc_notify(chat_id)
+    _thumb = await db.is_play_thumb(chat_id)
 
-    if cmd[1] == "delete":
+    action = cmd[1]
+    if action == "delete":
         _delete = not _delete
         await db.set_cmd_delete(chat_id, _delete)
-    elif cmd[1] == "play":
+    elif action == "play":
         await db.set_play_mode(chat_id, _admin)
         _admin = not _admin
-    await query.edit_message_reply_markup(
+    elif action == "welcome":
+        _welcome = not _welcome
+        await db.set_welcome(chat_id, _welcome)
+    elif action == "vc_notify":
+        _vc_notify = not _vc_notify
+        await db.set_vc_notify(chat_id, _vc_notify)
+    elif action == "thumb":
+        _thumb = not _thumb
+        await db.set_play_thumb(chat_id, _thumb)
+
+    chat_title = query.message.chat.title or "Chat"
+    await query.edit_message_text(
+        text=buttons.settings_text(
+            chat_title,
+            _admin,
+            _delete,
+            _welcome,
+            _vc_notify,
+            _thumb,
+            _language,
+        ),
         reply_markup=buttons.settings_markup(
             query.lang,
             _admin,
             _delete,
             _language,
             chat_id,
-        )
+            welcome=_welcome,
+            vc_notify=_vc_notify,
+            play_thumb=_thumb,
+        ),
     )
+
+
+@app.on_callback_query(filters.regex(r"^close$") & ~app.bl_users)
+async def _close_callback(_, query: types.CallbackQuery):
+    try:
+        await query.message.delete()
+        if query.message.reply_to_message:
+            await query.message.reply_to_message.delete()
+    except Exception:
+        pass
+
