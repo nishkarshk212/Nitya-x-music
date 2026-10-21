@@ -131,7 +131,7 @@ async def play_hndlr(
                 )
             return
 
-    if not file.file_path or not Path(file.file_path).exists():
+    if not file.file_path or not (str(file.file_path).startswith("http") or Path(file.file_path).exists()):
         file.file_path = yt.get_local_path(file.id, video=video)
 
         if not file.file_path:

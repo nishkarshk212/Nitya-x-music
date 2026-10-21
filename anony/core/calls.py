@@ -61,7 +61,7 @@ class TgCall(PyTgCalls):
         """Download track in background, pre-generate thumbnail, and cache metadata."""
         if not media:
             return None
-        if getattr(media, "file_path", None) and Path(media.file_path).exists():
+        if getattr(media, "file_path", None) and (str(media.file_path).startswith("http") or Path(media.file_path).exists()):
             return media.file_path
 
         video = getattr(media, "video", False)
@@ -80,6 +80,32 @@ class TgCall(PyTgCalls):
                         "video": video,
                     })
                 return fname
+
+        # Instant 0s Stream Play check
+        if getattr(config, "STREAM_PLAY", True) and not video and getattr(config, "YT_API_URL", None) and getattr(config, "YT_API_KEY", None):
+            stream_url = f"{config.YT_API_URL.rstrip('/')}/stream/audio?id={media.id}&api_key={config.YT_API_KEY}"
+            media.file_path = stream_url
+
+            # Background caching to disk & storage engine so subsequent plays are instant from local disk
+            async def _bg_cache_dl():
+                try:
+                    await yt.download(
+                        media.id,
+                        video=False,
+                        title=getattr(media, "title", ""),
+                        duration=getattr(media, "duration_sec", 0),
+                    )
+                except Exception as ex:
+                    logger.debug(f"Background cache download failed for {media.id}: {ex}")
+
+            asyncio.create_task(_bg_cache_dl())
+            if config.THUMB_GEN and isinstance(media, Track):
+                try:
+                    await thumb.generate(media)
+                except Exception:
+                    pass
+            self._downloading.discard(media.id)
+            return stream_url
 
         try:
             file_path = await yt.download(
@@ -382,8 +408,8 @@ class TgCall(PyTgCalls):
 
         _lang = await lang.get_lang(chat_id)
 
-        if media.file_path and Path(media.file_path).exists():
-            # 0 ms INSTANT PLAY: play directly from local disk
+        if media.file_path and (str(media.file_path).startswith("http") or Path(media.file_path).exists()):
+            # 0 ms INSTANT PLAY: play directly from local disk or live stream
             sent = await app.send_message(chat_id=chat_id, text=_lang["processing"])
             media.message_id = sent.id
             await self.play_media(chat_id, sent, media)

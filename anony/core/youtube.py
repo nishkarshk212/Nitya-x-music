@@ -537,51 +537,29 @@ class YouTube:
                 pass
 
     async def _live_download_api(self, video_id: str, base_url: str, api_key: str) -> str | None:
-        """Process 2: Live download stream from dedicated API."""
+        """Process 2: Live download proxy stream from dedicated API."""
         base_url = base_url.rstrip("/")
         out_file = f"downloads/{video_id}.mp3"
-        req_url = f"{base_url}/audio?id={video_id}"
+        stream_url = f"{base_url}/stream/audio?id={video_id}&api_key={api_key}"
         headers = {"x-api-key": api_key, "User-Agent": "Chips-Music/3.0"}
         try:
-            timeout = aiohttp.ClientTimeout(total=20)
+            dl_timeout = aiohttp.ClientTimeout(connect=15, sock_read=90, total=300)
             async with aiohttp.ClientSession() as session:
-                async with session.get(req_url, headers=headers, timeout=timeout) as resp:
-                    if resp.status != 200:
-                        return None
-                    data = await resp.json()
-                    stream_url = None
-                    audio = data.get("audio") or data.get("data") or data
-                    if isinstance(audio, dict):
-                        streams = audio.get("audio_streams", [])
-                        if streams and isinstance(streams, list):
-                            stream_url = streams[0].get("url")
-                        if not stream_url:
-                            best = audio.get("best_audio", {})
-                            stream_url = best.get("url") or audio.get("url") or audio.get("stream_url")
-                    elif "url" in data:
-                        stream_url = data["url"]
-
-                    if not stream_url:
-                        return None
-
-                    dl_timeout = aiohttp.ClientTimeout(connect=10, sock_read=60, total=300)
-                    async with session.get(
-                        stream_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=dl_timeout
-                    ) as dl_resp:
-                        if dl_resp.status in (200, 206):
-                            Path("downloads").mkdir(parents=True, exist_ok=True)
-                            tmp_out = f"{out_file}.tmp"
-                            with open(tmp_out, "wb") as f:
-                                async for chunk in dl_resp.content.iter_chunked(256 * 1024):
-                                    f.write(chunk)
-                            if Path(tmp_out).exists() and Path(tmp_out).stat().st_size > 1024:
-                                os.replace(tmp_out, out_file)
-                                logger.info(
-                                    f"[PROCESS 2: LIVE DOWNLOAD] Restored {video_id} via dedicated API {base_url} -> {out_file} ({Path(out_file).stat().st_size} bytes)"
-                                )
-                                return out_file
+                async with session.get(stream_url, headers=headers, timeout=dl_timeout, allow_redirects=True) as dl_resp:
+                    if dl_resp.status in (200, 206):
+                        Path("downloads").mkdir(parents=True, exist_ok=True)
+                        tmp_out = f"{out_file}.tmp"
+                        with open(tmp_out, "wb") as f:
+                            async for chunk in dl_resp.content.iter_chunked(256 * 1024):
+                                f.write(chunk)
+                        if Path(tmp_out).exists() and Path(tmp_out).stat().st_size > 1024:
+                            os.replace(tmp_out, out_file)
+                            logger.info(
+                                f"[PROCESS 2: LIVE STREAM DOWNLOAD] Cached {video_id} via dedicated API {base_url} -> {out_file} ({Path(out_file).stat().st_size} bytes)"
+                            )
+                            return out_file
         except Exception as e:
-            logger.warning(f"[PROCESS 2 FAIL] Live download via dedicated API {base_url} failed for {video_id}: {e}")
+            logger.warning(f"[PROCESS 2 FAIL] Stream download via dedicated API {base_url} failed for {video_id}: {e}")
         return None
 
     async def _complete_download_api(self, video_id: str, base_url: str, api_key: str) -> str | None:
